@@ -1,0 +1,17 @@
+paths:
+  live:
+    source: publisher
+    record: yes
+    recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+
+    runOnReady: >
+      ffmpeg -i rtmp://localhost:1935/live
+      -c:v libx264 -preset ultrafast -tune zerolatency
+      -x264-params bframes=0:keyint=60:min-keyint=60
+      -c:a aac
+      -f rtsp rtsp://localhost:8554/live_webrtc
+    runOnReadyRestart: yes
+
+  live_webrtc:
+    source: publisher

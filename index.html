@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WHEP Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=JetBrains+Mono:wght@300;400;500&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #08090a;
+      --bg2:      #0f1012;
+      --bg3:      #161719;
+      --border:   #232528;
+      --teal:     #00c9a7;
+      --teal-dim: #007d68;
+      --red:      #ff4757;
+      --amber:    #ffa502;
+      --text:     #c8cdd4;
+      --text-dim: #555b63;
+      --mono:     'JetBrains Mono', monospace;
+      --sans:     'Outfit', sans-serif;
+      --serif:    'DM Serif Display', serif;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+    /* grain overlay */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    .app {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 28px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 22px 0 18px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand h1 {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 400;
+      color: #fff;
+      letter-spacing: 0.01em;
+      line-height: 1;
+    }
+    .brand p {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-top: 5px;
+    }
+
+    .conn-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .state-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s, box-shadow 0.3s;
+      flex-shrink: 0;
+    }
+    .state-dot.connected   { background: var(--teal);  box-shadow: 0 0 10px var(--teal); }
+    .state-dot.connecting  { background: var(--amber); box-shadow: 0 0 10px var(--amber); animation: blink 1s ease-in-out infinite; }
+    .state-dot.failed      { background: var(--red);   box-shadow: 0 0 10px var(--red); }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
+    /* ── Main ── */
+    main { padding: 24px 0; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── URL Bar ── */
+    .url-bar {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .url-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .url-prefix {
+      position: absolute;
+      left: 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      pointer-events: none;
+      user-select: none;
+    }
+    input[type="text"] {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: var(--teal-dim);
+      box-shadow: 0 0 0 3px rgba(0,201,167,0.07);
+    }
+    input::placeholder { color: var(--text-dim); }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0 22px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-connect {
+      background: var(--teal);
+      color: #000;
+    }
+    .btn-connect:hover { background: #00e8c1; }
+    .btn-connect:active { transform: scale(0.97); }
+    .btn-connect:disabled { background: var(--teal-dim); color: rgba(0,0,0,0.5); cursor: not-allowed; }
+
+    .btn-stop {
+      background: transparent;
+      color: var(--red);
+      border: 1px solid #ff475740;
+      display: none;
+    }
+    .btn-stop:hover { background: rgba(255,71,87,0.08); border-color: var(--red); }
+    .btn-stop:active { transform: scale(0.97); }
+
+    .btn-reconnect {
+      background: transparent;
+      color: var(--amber);
+      border: 1px solid #ffa50240;
+      display: none;
+    }
+    .btn-reconnect:hover { background: rgba(255,165,2,0.08); border-color: var(--amber); }
+
+    /* ── Player ── */
+    .player-wrap {
+      position: relative;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+    }
+    video {
+      width: 100%; height: 100%;
+      display: block;
+      background: #000;
+    }
+
+    /* Overlay */
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+      background: var(--bg);
+      transition: opacity 0.35s, visibility 0.35s;
+    }
+    .overlay.hidden { opacity: 0; visibility: hidden; }
+
+    .overlay-ring {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .overlay-ring svg { width: 22px; height: 22px; }
+
+    .spinner-ring {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      border-top-color: var(--teal);
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .overlay-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .overlay-title.error { color: var(--red); }
+    .overlay-detail {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.7;
+      display: none;
+    }
+
+    /* Live badge */
+    .live-badge {
+      position: absolute; top: 14px; left: 14px;
+      background: var(--red);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 4px 9px 3px;
+      border-radius: 3px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    .live-badge.visible { display: flex; }
+    .live-pulse {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: #fff;
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    /* Stats HUD */
+    .hud {
+      position: absolute; top: 14px; right: 14px;
+      background: rgba(8,9,10,0.75);
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(8px);
+      border-radius: 4px;
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 170px;
+    }
+    .hud.visible { display: flex; }
+    .hud-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-dim); }
+    .hud-val { color: var(--text); }
+    .hud-val.good { color: var(--teal); }
+    .hud-val.warn { color: var(--amber); }
+    .hud-val.bad  { color: var(--red); }
+    .hud-divider { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .stat {
+      background: var(--bg2);
+      padding: 11px 14px;
+    }
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text);
+      transition: color 0.3s;
+    }
+    .stat-val.good { color: var(--teal); }
+    .stat-val.warn { color: var(--amber); }
+    .stat-val.bad  { color: var(--red); }
+    .stat-unit { font-size: 9px; color: var(--text-dim); margin-left: 2px; }
+
+    /* ── ICE log ── */
+    .log-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .log-header {
+      padding: 9px 14px;
+      background: var(--bg3);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .log-clear {
+      background: none; border: none;
+      font-family: var(--mono); font-size: 9px;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-dim); cursor: pointer;
+      transition: color 0.15s;
+    }
+    .log-clear:hover { color: var(--teal); }
+    .log-body {
+      padding: 10px 14px;
+      max-height: 110px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .log-body::-webkit-scrollbar { width: 4px; }
+    .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .log-entry {
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text-dim);
+      display: flex;
+      gap: 10px;
+    }
+    .log-time { color: var(--teal-dim); flex-shrink: 0; }
+    .log-entry.info  .log-msg { color: var(--text); }
+    .log-entry.ok    .log-msg { color: var(--teal); }
+    .log-entry.warn  .log-msg { color: var(--amber); }
+    .log-entry.error .log-msg { color: var(--red); }
+
+    /* ── Footer ── */
+    footer {
+      padding: 14px 0;
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+    }
+    footer a { color: var(--text-dim); text-decoration: none; }
+    footer a:hover { color: var(--teal); }
+
+    @media (max-width: 720px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .url-bar { grid-template-columns: 1fr; }
+      .btn { padding: 11px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <h1>WHEP Player</h1>
+      <p>WebRTC · Sub-second latency</p>
+    </div>
+    <div class="conn-state">
+      <div class="state-dot" id="stateDot"></div>
+      <span id="stateLabel">Disconnected</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- URL bar -->
+    <div class="url-bar">
+      <input
+        type="text"
+        id="urlInput"
+        placeholder="http://localhost:8889/live/stream/whep"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="btn btn-connect" id="btnConnect">▶ Connect</button>
+      <button class="btn btn-stop"      id="btnStop">■ Stop</button>
+      <button class="btn btn-reconnect" id="btnReconnect">↺ Retry</button>
+    </div>
+
+    <!-- Player -->
+    <div class="player-wrap">
+      <video id="video" autoplay playsinline muted></video>
+
+      <div class="overlay" id="overlay">
+        <div class="overlay-ring" id="overlayIcon">
+          <svg viewBox="0 0 24 24" fill="var(--text-dim)"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <div class="overlay-title" id="overlayTitle">Enter a WHEP URL above</div>
+        <div class="overlay-detail" id="overlayDetail"></div>
+      </div>
+
+      <div class="live-badge" id="liveBadge">
+        <div class="live-pulse"></div> Live
+      </div>
+
+      <div class="hud" id="hud">
+        <div class="hud-row"><span>Latency</span>   <span class="hud-val" id="hudLatency">—</span></div>
+        <div class="hud-row"><span>Jitter</span>    <span class="hud-val" id="hudJitter">—</span></div>
+        <hr class="hud-divider"/>
+        <div class="hud-row"><span>Video</span>     <span class="hud-val" id="hudVBitrate">—</span></div>
+        <div class="hud-row"><span>Audio</span>     <span class="hud-val" id="hudABitrate">—</span></div>
+        <hr class="hud-divider"/>
+        <div class="hud-row"><span>Packets lost</span><span class="hud-val" id="hudLost">—</span></div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="stat-label">State</div>
+        <div class="stat-val" id="sState">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Resolution</div>
+        <div class="stat-val" id="sRes">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Frame Rate</div>
+        <div class="stat-val" id="sFps">—<span class="stat-unit">fps</span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Video Bitrate</div>
+        <div class="stat-val" id="sVBit">—<span class="stat-unit">kbps</span></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Packets Lost</div>
+        <div class="stat-val" id="sLost">—</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">ICE State</div>
+        <div class="stat-val" id="sIce">—</div>
+      </div>
+    </div>
+
+    <!-- Event log -->
+    <div class="log-card">
+      <div class="log-header">
+        <span>◈ Event Log</span>
+        <button class="log-clear" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+  </main>
+
+  <footer>
+    <span>WHEP · WebRTC HTTP Egress Protocol · RFC draft</span>
+    <span>
+      <a href="https://github.com/bluenviron/mediamtx" target="_blank">MediaMTX</a> ·
+      <a href="https://www.ietf.org/archive/id/draft-ietf-wish-whep-01.txt" target="_blank">Spec</a>
+    </span>
+  </footer>
+
+</div>
+<script>
+/* ═══════════════════════════════════════════════
+   DOM
+═══════════════════════════════════════════════ */
+const video        = document.getElementById('video');
+const urlInput     = document.getElementById('urlInput');
+const btnConnect   = document.getElementById('btnConnect');
+const btnStop      = document.getElementById('btnStop');
+const btnReconnect = document.getElementById('btnReconnect');
+const overlay      = document.getElementById('overlay');
+const overlayIcon  = document.getElementById('overlayIcon');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayDetail= document.getElementById('overlayDetail');
+const stateDot     = document.getElementById('stateDot');
+const stateLabel   = document.getElementById('stateLabel');
+const liveBadge    = document.getElementById('liveBadge');
+const hud          = document.getElementById('hud');
+const logBody      = document.getElementById('logBody');
+
+/* ═══════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════ */
+let pc           = null;   // RTCPeerConnection
+let whepResource = null;   // URL returned in Location header for ICE trickle
+let statsTimer   = null;
+let prevVideoBytes = 0, prevAudioBytes = 0, prevStatsTime = 0;
+
+/* ═══════════════════════════════════════════════
+   Buttons
+═══════════════════════════════════════════════ */
+btnConnect.addEventListener('click',   connect);
+btnStop.addEventListener('click',      teardown);
+btnReconnect.addEventListener('click', () => { teardown(); setTimeout(connect, 300); });
+urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
+
+/* ═══════════════════════════════════════════════
+   Connect
+═══════════════════════════════════════════════ */
+async function connect() {
+  const url = urlInput.value.trim();
+  if (!url) { urlInput.focus(); return; }
+
+  teardown();
+  setUIState('connecting');
+  showOverlay('spinner', 'Connecting…');
+  log('info', `Connecting to ${url}`);
+
+  try {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      bundlePolicy: 'max-bundle',
+    });
+
+    /* ── Receive tracks ── */
+    pc.ontrack = ({ track, streams }) => {
+      log('ok', `Track received: ${track.kind}`);
+      if (track.kind === 'video') {
+        video.srcObject = streams[0];
+        video.play().catch(() => {
+          // autoplay blocked — unmute and retry
+          video.muted = true;
+          video.play();
+        });
+      }
+    };
+
+    /* ── ICE events ── */
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) log('info', `ICE candidate: ${candidate.type} ${candidate.protocol}`);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      log('info', `ICE: ${s}`);
+      document.getElementById('sIce').textContent = s;
+
+      if (s === 'connected' || s === 'completed') {
+        setUIState('live');
+        hideOverlay();
+        startStats();
+      } else if (s === 'failed') {
+        showOverlay('error', 'ICE Failed', 'Could not establish a peer connection.\nCheck firewall / UDP port 8189.');
+        setUIState('failed');
+        log('error', 'ICE connection failed');
+      } else if (s === 'disconnected') {
+        setUIState('disconnected');
+        showOverlay('warn', 'Stream disconnected', 'Waiting for source…');
+        log('warn', 'ICE disconnected — source may have stopped');
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      log('info', `Connection: ${pc.connectionState}`);
+    };
+
+    /* ── Add transceivers (recvonly) ── */
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    /* ── Create offer ── */
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    log('info', 'SDP offer created');
+
+    /* ── Wait for ICE gathering ── */
+    await waitForIceGathering(pc);
+    log('ok', 'ICE gathering complete');
+
+    /* ── POST to WHEP endpoint ── */
+    log('info', `POST ${url}`);
+    const resp = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body:    pc.localDescription.sdp,
+    });
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${body}`);
+    }
+
+    /* ── Store WHEP resource for later cleanup ── */
+    whepResource = resp.headers.get('Location') || null;
+    if (whepResource) log('info', `WHEP resource: ${whepResource}`);
+
+    /* ── Apply SDP answer ── */
+    const answerSdp = await resp.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+    log('ok', 'SDP answer applied — negotiation complete');
+
+  } catch (err) {
+    showOverlay('error', 'Connection failed', err.message);
+    setUIState('failed');
+    log('error', err.message);
+    teardownPc();
+  }
+}
+
+/* ── Wait for ICE gathering to finish ── */
+function waitForIceGathering(pc) {
+  return new Promise(resolve => {
+    if (pc.iceGatheringState === 'complete') { resolve(); return; }
+    const check = () => {
+      if (pc.iceGatheringState === 'complete') {
+        pc.removeEventListener('icegatheringstatechange', check);
+        resolve();
+      }
+    };
+    pc.addEventListener('icegatheringstatechange', check);
+    // Safety timeout — proceed after 4s even if not complete
+    setTimeout(resolve, 4000);
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   Teardown
+═══════════════════════════════════════════════ */
+async function teardown() {
+  stopStats();
+  // DELETE the WHEP resource to signal we're done
+  if (whepResource) {
+    fetch(whepResource, { method: 'DELETE' }).catch(() => {});
+    whepResource = null;
+  }
+  teardownPc();
+  video.pause();
+  video.srcObject = null;
+  setUIState('idle');
+  showOverlay('icon', 'Enter a WHEP URL above');
+  resetStats();
+}
+
+function teardownPc() {
+  if (!pc) return;
+  pc.ontrack = null;
+  pc.onicecandidate = null;
+  pc.oniceconnectionstatechange = null;
+  pc.onconnectionstatechange = null;
+  pc.close();
+  pc = null;
+}
+
+/* ═══════════════════════════════════════════════
+   Stats
+═══════════════════════════════════════════════ */
+function startStats() {
+  liveBadge.classList.add('visible');
+  hud.classList.add('visible');
+  statsTimer = setInterval(updateStats, 1000);
+  updateStats();
+}
+
+function stopStats() {
+  clearInterval(statsTimer);
+  statsTimer = null;
+  liveBadge.classList.remove('visible');
+  hud.classList.remove('visible');
+}
+
+async function updateStats() {
+  if (!pc) return;
+
+  // Resolution + FPS from video element
+  if (video.videoWidth) {
+    document.getElementById('sRes').textContent = `${video.videoWidth}×${video.videoHeight}`;
+  }
+
+  // RTCStatsReport
+  try {
+    const stats = await pc.getStats();
+    const now = Date.now();
+    const dt  = prevStatsTime ? (now - prevStatsTime) / 1000 : 1;
+    prevStatsTime = now;
+
+    let videoBytes = 0, audioBytes = 0;
+    let fps = 0, lost = 0, jitter = 0, rtt = 0;
+
+    stats.forEach(r => {
+      if (r.type === 'inbound-rtp' && r.kind === 'video') {
+        videoBytes = r.bytesReceived || 0;
+        fps        = Math.round(r.framesPerSecond || 0);
+        lost       = r.packetsLost  || 0;
+        jitter     = ((r.jitter || 0) * 1000).toFixed(1);
+      }
+      if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+        audioBytes = r.bytesReceived || 0;
+      }
+      if (r.type === 'candidate-pair' && r.state === 'succeeded') {
+        rtt = r.currentRoundTripTime ? (r.currentRoundTripTime * 1000).toFixed(0) : rtt;
+      }
+    });
+
+    const vKbps = prevVideoBytes ? Math.round((videoBytes - prevVideoBytes) * 8 / dt / 1000) : 0;
+    const aKbps = prevAudioBytes ? Math.round((audioBytes - prevAudioBytes) * 8 / dt / 1000) : 0;
+    prevVideoBytes = videoBytes;
+    prevAudioBytes = audioBytes;
+
+    // Update stats bar
+    setStatVal('sFps',  fps, fps >= 24 ? 'good' : fps >= 10 ? 'warn' : 'bad', fps + '<span class="stat-unit">fps</span>');
+    setStatVal('sVBit', vKbps, vKbps > 100 ? 'good' : vKbps > 30 ? 'warn' : 'bad', vKbps + '<span class="stat-unit">kbps</span>');
+    setStatVal('sLost', lost, lost === 0 ? 'good' : lost < 20 ? 'warn' : 'bad');
+
+    // HUD
+    const latClass = rtt < 100 ? 'good' : rtt < 300 ? 'warn' : 'bad';
+    setHud('hudLatency', rtt ? `${rtt} ms` : '—', latClass);
+    setHud('hudJitter',  jitter ? `${jitter} ms` : '—', jitter < 10 ? 'good' : jitter < 30 ? 'warn' : 'bad');
+    setHud('hudVBitrate', vKbps ? `${vKbps} kbps` : '—');
+    setHud('hudABitrate', aKbps ? `${aKbps} kbps` : '—');
+    setHud('hudLost', String(lost), lost === 0 ? 'good' : lost < 20 ? 'warn' : 'bad');
+
+  } catch (_) {}
+}
+
+function setStatVal(id, raw, cls, html) {
+  const el = document.getElementById(id);
+  el.className = `stat-val ${cls}`;
+  if (html !== undefined) el.innerHTML = html;
+  else el.textContent = raw;
+}
+function setHud(id, text, cls = '') {
+  const el = document.getElementById(id);
+  el.textContent  = text;
+  el.className = `hud-val ${cls}`;
+}
+function resetStats() {
+  ['sState','sRes','sFps','sVBit','sLost','sIce'].forEach(id => {
+    const el = document.getElementById(id);
+    el.className = 'stat-val';
+    el.textContent = '—';
+  });
+  ['hudLatency','hudJitter','hudVBitrate','hudABitrate','hudLost'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  prevVideoBytes = prevAudioBytes = prevStatsTime = 0;
+}
+
+/* ═══════════════════════════════════════════════
+   UI helpers
+═══════════════════════════════════════════════ */
+function setUIState(state) {
+  const labels = {
+    idle: 'Disconnected', connecting: 'Connecting…',
+    live: 'Live', failed: 'Failed', disconnected: 'Disconnected',
+  };
+  const dotCls = {
+    idle: '', connecting: 'connecting', live: 'connected',
+    failed: 'failed', disconnected: '',
+  };
+  stateDot.className  = `state-dot ${dotCls[state] || ''}`;
+  stateLabel.textContent = labels[state] || state;
+
+  document.getElementById('sState').textContent = labels[state] || state;
+  document.getElementById('sState').className = `stat-val ${state === 'live' ? 'good' : state === 'failed' ? 'bad' : ''}`;
+
+  btnConnect.style.display   = (state === 'connecting' || state === 'live') ? 'none' : '';
+  btnStop.style.display      = (state === 'live' || state === 'connecting') ? '' : 'none';
+  btnReconnect.style.display = (state === 'failed' || state === 'disconnected') ? '' : 'none';
+  btnConnect.disabled        = state === 'connecting';
+}
+
+function showOverlay(type, title, detail = '') {
+  overlay.classList.remove('hidden');
+  overlayTitle.className = 'overlay-title';
+  overlayDetail.style.display = 'none';
+
+  if (type === 'spinner') {
+    overlayIcon.innerHTML = '<div class="spinner-ring"></div>';
+  } else if (type === 'error') {
+    overlayIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="var(--red)" width="22" height="22"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>`;
+    overlayTitle.className = 'overlay-title error';
+    if (detail) { overlayDetail.textContent = detail; overlayDetail.style.display = ''; }
+  } else if (type === 'warn') {
+    overlayIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="var(--amber)" width="22" height="22"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>`;
+    if (detail) { overlayDetail.textContent = detail; overlayDetail.style.display = ''; }
+  } else {
+    overlayIcon.innerHTML = `<svg viewBox="0 0 24 24" fill="var(--text-dim)" width="22" height="22"><path d="M8 5v14l11-7z"/></svg>`;
+  }
+  overlayTitle.textContent = title;
+}
+
+function hideOverlay() { overlay.classList.add('hidden'); }
+
+/* ═══════════════════════════════════════════════
+   Log
+═══════════════════════════════════════════════ */
+function log(level, msg) {
+  const now  = new Date();
+  const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const row  = document.createElement('div');
+  row.className = `log-entry ${level}`;
+  row.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
+  logBody.appendChild(row);
+  logBody.scrollTop = logBody.scrollHeight;
+  // Keep last 80 entries
+  while (logBody.children.length > 80) logBody.removeChild(logBody.firstChild);
+}
+
+function clearLog() { logBody.innerHTML = ''; }
+</script>
+</body>
+</html>

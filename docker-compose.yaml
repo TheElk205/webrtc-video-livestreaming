@@ -1,0 +1,13 @@
+# docker-compose.yml
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    restart: unless-stopped
+    # network_mode: host          # needed for WebRTC UDP
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+      - ./recordings:/recordings
+    ports:
+     - 1935:1935   # RTMP
+     - 8889:8889   # WebRTC HTTP
+     - 8189:8189/udp  # WebRTC UDP (if needed)
