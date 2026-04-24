@@ -11,3 +11,17 @@ services:
      - 1935:1935   # RTMP
      - 8889:8889   # WebRTC HTTP
      - 8189:8189/udp  # WebRTC UDP (if needed)
+
+  player:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./index.html:/templates/index.html:ro
+    environment:
+      WHEP_URL: http://localhost:8889/live_webrtc/whep
+    command: >
+      /bin/sh -c
+      "envsubst '$$WHEP_URL' < /templates/index.html > /usr/share/nginx/html/index.html
+      && nginx -g 'daemon off;'"

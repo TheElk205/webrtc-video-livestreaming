@@ -278,6 +278,7 @@
     .hud-val.good { color: var(--teal); }
     .hud-val.warn { color: var(--amber); }
     .hud-val.bad  { color: var(--red); }
+    .hud-val.skip { color: var(--red); animation: blink 0.5s ease-in-out 3; }
     .hud-divider { border: none; border-top: 1px solid var(--border); margin: 2px 0; }
 
     /* ── Stats grid ── */
@@ -408,7 +409,7 @@
       <input
         type="text"
         id="urlInput"
-        placeholder="http://localhost:8889/live/stream/whep"
+        value="${WHEP_URL}"
         autocomplete="off"
         spellcheck="false"
       />
@@ -441,6 +442,8 @@
         <div class="hud-row"><span>Audio</span>     <span class="hud-val" id="hudABitrate">—</span></div>
         <hr class="hud-divider"/>
         <div class="hud-row"><span>Packets lost</span><span class="hud-val" id="hudLost">—</span></div>
+        <hr class="hud-divider"/>
+        <div class="hud-row"><span>Buffer</span>     <span class="hud-val" id="hudBuffer">—</span></div>
       </div>
     </div>
 
@@ -517,7 +520,15 @@ const logBody      = document.getElementById('logBody');
 let pc           = null;   // RTCPeerConnection
 let whepResource = null;   // URL returned in Location header for ICE trickle
 let statsTimer   = null;
+let liveEdgeTimer = null;
 let prevVideoBytes = 0, prevAudioBytes = 0, prevStatsTime = 0;
+
+// Buffer more than this → hard seek to live edge (seconds)
+const MAX_BUFFER_AHEAD = 1.5;
+// Buffer in this range → speed up playback instead of jumping
+const CATCHUP_THRESHOLD = 0.5;
+// Land this far behind the buffered end after a seek (seconds)
+const LIVE_EDGE_OFFSET = 0.08;
 
 /* ═══════════════════════════════════════════════
    Buttons
@@ -681,14 +692,45 @@ function startStats() {
   liveBadge.classList.add('visible');
   hud.classList.add('visible');
   statsTimer = setInterval(updateStats, 1000);
+  liveEdgeTimer = setInterval(correctLiveEdge, 500);
   updateStats();
 }
 
 function stopStats() {
   clearInterval(statsTimer);
+  clearInterval(liveEdgeTimer);
   statsTimer = null;
+  liveEdgeTimer = null;
   liveBadge.classList.remove('visible');
   hud.classList.remove('visible');
+}
+
+function correctLiveEdge() {
+  if (video.paused || !video.buffered.length) return;
+
+  const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+  const ahead = bufferedEnd - video.currentTime;
+
+  // Update buffer HUD
+  const bufEl = document.getElementById('hudBuffer');
+  if (bufEl) {
+    bufEl.textContent = `${ahead.toFixed(2)} s`;
+    bufEl.className = `hud-val ${ahead < CATCHUP_THRESHOLD ? 'good' : ahead < MAX_BUFFER_AHEAD ? 'warn' : 'bad'}`;
+  }
+
+  if (ahead > MAX_BUFFER_AHEAD) {
+    // Hard skip — buffer too deep, jump straight to live edge
+    video.currentTime = bufferedEnd - LIVE_EDGE_OFFSET;
+    video.playbackRate = 1.0;
+    log('warn', `Buffer ${ahead.toFixed(2)}s — skipped to live edge`);
+    if (bufEl) { bufEl.className = 'hud-val skip'; }
+  } else if (ahead > CATCHUP_THRESHOLD) {
+    // Soft catch-up — speed up slightly so we drift to live edge without a jump
+    video.playbackRate = 1.08;
+  } else {
+    // At live edge — normal speed
+    video.playbackRate = 1.0;
+  }
 }
 
 async function updateStats() {
@@ -762,7 +804,7 @@ function resetStats() {
     el.className = 'stat-val';
     el.textContent = '—';
   });
-  ['hudLatency','hudJitter','hudVBitrate','hudABitrate','hudLost'].forEach(id => {
+  ['hudLatency','hudJitter','hudVBitrate','hudABitrate','hudLost','hudBuffer'].forEach(id => {
     document.getElementById(id).textContent = '—';
   });
   prevVideoBytes = prevAudioBytes = prevStatsTime = 0;
@@ -830,6 +872,9 @@ function log(level, msg) {
 }
 
 function clearLog() { logBody.innerHTML = ''; }
+
+// Auto-connect on load if a URL was injected at build time
+if (urlInput.value.trim() && !urlInput.value.includes('${')) connect();
 </script>
 </body>
 </html>
