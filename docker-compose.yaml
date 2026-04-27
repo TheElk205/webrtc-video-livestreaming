@@ -8,7 +8,7 @@ services:
     environment:
       # Set this to your server's public hostname or IP in Coolify.
       # mediamtx includes it in ICE candidates so browsers can reach it over UDP.
-      MTX_WEBRTCADDITIONALHOSTS: "ive.ff-drone.deployments.ferdinand-koeppen.tech"
+      MTX_WEBRTCADDITIONALHOSTS: "live.ff-drone.deployments.ferdinand-koeppen.tech"
     volumes:
       - recordings:/recordings
     ports:
