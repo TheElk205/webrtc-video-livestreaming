@@ -6,7 +6,7 @@ services:
     # network_mode: host          # needed for WebRTC UDP
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
-      - ./recordings:/recordings
+      - recordings:/recordings
     ports:
      - 1935:1935   # RTMP
      - 8889:8889   # WebRTC HTTP
@@ -25,3 +25,6 @@ services:
       /bin/sh -c
       "envsubst '$$WHEP_URL' < /templates/index.html > /usr/share/nginx/html/index.html
       && nginx -g 'daemon off;'"
+
+volumes:
+  recordings:
