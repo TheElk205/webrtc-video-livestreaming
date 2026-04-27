@@ -17,8 +17,6 @@ services:
       context: .
       dockerfile: Dockerfile.player
     restart: unless-stopped
-    ports:
-      - "8080:80"
     environment:
       WHEP_URL: http://localhost:8889/live_webrtc/whep
 
