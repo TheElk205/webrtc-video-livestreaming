@@ -1,3 +1,11 @@
+# Public hostname/IP so ICE candidates are reachable from the browser.
+# Override via env var: MTX_WEBRTCADDITIONALHOSTS=your-domain.com
+webrtcAdditionalHosts:
+  - ""
+
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+
 paths:
   live:
     source: publisher
